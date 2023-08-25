@@ -1,0 +1,8 @@
+Resources:
+  - myLambdaFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+        Name: WorkshopFunction
+        Alias: dev
+        CurrentVersion: 1
+        TargetVersion: 2

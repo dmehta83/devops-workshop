@@ -1,0 +1,58 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - export LAMBDA_FUNCTION_NAME="WorkshopFunction"
+      - export LAMBDA_FUNCTION_ALIAS_DEV="dev"
+      # - export LAMBDA_FUNCTION_ALIAS_PROD="prod"      
+      - export AWS_REGION="us-east-1"
+
+  build:
+    commands:
+      # Create a deployment package directory
+      - mkdir deployment-package
+      # Copy Lambda function code to the deployment package directory
+      - cp -r lambda/* deployment-package/
+      # Zip the deployment package
+      - cd deployment-package
+      - zip -r ../lambda-code.zip .
+      - cd ..      
+
+  post_build:
+    commands:
+      # Update the Lambda function code
+      - aws lambda update-function-code --function-name ${LAMBDA_FUNCTION_NAME} --zip-file fileb://./lambda-code.zip
+      # Wait for the Lambda function update to complete
+      - sleep 5
+      # Publish a new version and extract the version number
+      - export NEW_VERSION_NUMBER=$(aws lambda publish-version --function-name ${LAMBDA_FUNCTION_NAME} | jq -r '.Version') 
+
+
+      # Get the current version ARN of the Lambda function alias
+      - export CURRENT_DEV_VERSION_NUMBER=$(aws lambda get-alias --function-name ${LAMBDA_FUNCTION_NAME} --name ${LAMBDA_FUNCTION_ALIAS_DEV} | jq -r '.FunctionVersion')
+      # Create Dev Directory
+      - mkdir dev
+      # Create a JSON representation of the updated appspec
+      - echo "{\"Resources\":[{\"myLambdaFunction\":{\"Type\":\"AWS::Lambda::Function\",\"Properties\":{\"Name\":\"$LAMBDA_FUNCTION_NAME\",\"Alias\":\"dev\",\"CurrentVersion\":\"$CURRENT_DEV_VERSION_NUMBER\",\"TargetVersion\":\"$NEW_VERSION_NUMBER\"}}}]}" > appspec.json
+
+      # # Get the current version ARN of the Lambda function alias
+      # - export CURRENT_PROD_VERSION_NUMBER=$(aws lambda get-alias --function-name ${LAMBDA_FUNCTION_NAME} --name ${LAMBDA_FUNCTION_ALIAS_PROD} | jq -r '.FunctionVersion')      
+      # # Create Prod Directory
+      # - mkdir prod
+      # # Create a JSON representation of the updated appspec
+      # - echo "{\"Resources\":[{\"myLambdaFunction\":{\"Type\":\"AWS::Lambda::Function\",\"Properties\":{\"Name\":\"$LAMBDA_FUNCTION_NAME\",\"Alias\":\"prod\",\"CurrentVersion\":\"$CURRENT_PROD_VERSION_NUMBER\",\"TargetVersion\":\"$NEW_VERSION_NUMBER\"}}}]}" > prod/appspec.json
+
+artifacts:
+  files:
+    - appspec.json
+  #   - '**/*'
+  # secondary-artifacts:
+  #   appspecdev:
+  #     base-directory: dev
+  #     files:
+  #       - appspec.json
+  #   appspecprod:
+  #     base-directory: prod
+  #     files:
+  #       - appspec.json
